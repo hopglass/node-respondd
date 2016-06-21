@@ -18,6 +18,10 @@ A respondd server written in node.js.
 executed with root privileges by `respondd`. If you use the `respondd.service` for *systemd*, this would
 be for user `nobody`.
 
+A possible way to extend suoders file accordingly would be:
+
+    nobody ALL=(root) NOPASSWD: /opt/node-respondd/bat-list-neighbours
+
 ## Configuration
 
 With default setup, the file `/opt/node-respondd/config.json` will be read for configuration.
