@@ -1,0 +1,8 @@
+{
+  "bat_iface": "bat0",
+  "mcast_group": "ff02::2:1001",
+  "mcast_iface": "bat0",
+  "port": "1001",
+  "site_code": undefined
+}
+

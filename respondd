@@ -1,0 +1,220 @@
+#!/usr/bin/env node
+
+const dgram = require('dgram')
+const socket = dgram.createSocket('udp6')
+const fs = require('fs')
+const zlib = require('zlib')
+const os = require('os')
+const process = require('child_process')
+
+const defConfig = {
+  "bat_iface": "bat0",
+  "mcast_group": "ff02::2:1001",
+  "mcast_iface": "bat0",
+  "port": "1001",
+  "site_code": undefined
+}
+
+function getNodeinfo() {
+  return {
+    "software": {
+      "autoupdater": {
+        "enabled": false
+      },
+      "batman-adv": {
+        "version": getFileContents("/sys/module/batman_adv/version")
+      },
+      "fastd": {
+        "enabled": isProcessRunning("fastd")
+      },
+      "tunneldigger": {
+        "enabled": isProcessRunning("l2tp_broker")
+      }
+    },
+    "network": {
+      "addresses": getV6AddrForInterface(getConfig("mcast_iface")),
+      "mesh": getMeshAddresses(),
+      "mac": getPrimaryMac()
+    },
+    "system": {
+      "site_code": getConfig("site_code")
+    },
+    "hostname": os.hostname(),
+    "hardware": {
+      "model": os.cpus()[0].model,
+      "nproc": os.cpus().length
+    }
+  }
+}
+
+function getStatistics() {
+  return {
+    "traffic": getTrafficStats(),
+    "memory": {
+      "total": os.totalmem(),
+      "free": os.freemem()
+    },
+    "uptime": os.uptime(),
+    "loadavg": os.loadavg()[0],
+    "processes": {
+      "running": parseInt(evalExec("ps ax | awk '{print $3}' | grep R | wc -l")),
+      "total": parseInt(evalExec("ps ax | wc -l")) - 1,
+    }
+  }
+}
+
+function getNeighbours() {
+  return {
+    "batadv": JSON.parse(evalExec("sudo ./bat-list-neighbours"))
+  }
+}
+
+function getV6AddrForInterface(iface) {
+  try {
+    return os.networkInterfaces()[iface].filter((a) => a.family == "IPv6").map((a) => a.address)
+  } catch (e) {
+    return undefined
+  }
+}
+
+function isProcessRunning(name) {
+  try {
+    return evalExec("sh -c \"ps a | grep "+name+" | grep -v grep\"").length > 0
+  } catch (e) {
+    return false
+  }
+}
+
+function evalExec(line) {
+  try {
+    return process.execSync(line).toString().trim()
+  } catch (e) {
+    return undefined
+  }
+}
+
+function getFileContents(name) {
+  try {
+    return fs.readFileSync(name).toString().trim()
+  } catch (e) {
+    return undefined
+  }
+}
+
+function getTrafficStats() {
+  try {
+    var res = {}
+    var vs = evalExec("/sbin/ethtool -S " + getConfig("bat_iface") + " | head -n 12 | tail -n 11").split("\n")
+    vs.forEach((v) => {
+      var x = v.split(": ")
+      var group = x[0].trim()
+      var type = "packets"
+      var val = parseInt(x[1].trim())
+      if (group.indexOf("_bytes") > -1) {
+        group = group.substring(0,group.length-6)
+        type = "bytes"
+      }
+      if (group.indexOf("_dropped") > -1) {
+        group = group.substring(0,group.length-8)
+        type = "dropped"
+      }
+      if (!(group in res)) res[group] = {}
+      res[group][type] = val
+    })
+    return res
+  } catch (e) {
+    return undefined
+  }
+}
+
+function getMeshAddresses() {
+  var bat = getConfig("bat_iface")
+  var data = {
+    "interfaces": {
+      "tunnel": evalExec("cat /sys/class/net/"+bat+"/lower_*/address").split("\n"),
+      "other": [getPrimaryMac()]
+    }
+  }
+  var res = {}
+  res[bat] = data
+  return res
+}
+
+function getNodeId() {
+  return getPrimaryMac().replace(/:/g,"")
+}
+
+function getPrimaryMac() {
+  return getMac(getConfig("mcast_iface"));
+}
+
+function getMac(iface) {
+  try {
+    return os.networkInterfaces()[iface][0].mac
+  } catch (e) {
+    return "00:00:00:00:00:00"
+  }
+}
+
+function getData(what) {
+  var data = {}
+  switch(what) {
+    case "nodeinfo": data = getNodeinfo(); break
+    case "statistics": data = getStatistics(); break
+    case "neighbours": data = getNeighbours(); break
+    default: console.log("Unknown data type: " + what)
+  }
+  data.node_id = getNodeId()
+  var res = {}
+  res[what] = data
+  return res
+}
+
+var config = {}
+
+try {
+  config = JSON.parse(fs.readFileSync("./config.json"))
+} catch (err) {
+  console.log("no config file found")
+}
+
+function getConfig(opt) {
+  if (opt == "listen")
+    return getV6AddrForInterface(getConfig("mcast_iface")).filter((a) => a.startsWith("fe80:"))[0] + "%" + getConfig("mcast_iface")
+  if (opt in config) return config[opt]
+  else return defConfig[opt]
+}
+
+socket.on('error', (err) => {
+  console.log("socket error: " + err)
+  socket.close()
+})
+
+socket.on('message', (msg, rinfo) => {
+  if (!rinfo.address.startsWith("fe80:")) return
+  msg = msg.toString()
+  console.log("message from: "+rinfo.address+": "+msg)
+  if (msg.startsWith("GET ")) {
+    // Multi case
+    var whats = msg.substring(4).split(" ")
+    whats.forEach((what) => {
+      zlib.deflateRaw(new Buffer(JSON.stringify(getData(what.trim()))), (_, data) => {
+        socket.send(data, 0, data.length, rinfo.port, rinfo.address + "%" + getConfig("mcast_iface"), (err) => { if (err) console.log(err) })
+      })
+    })
+  } else {
+    // Single case
+    var res = new Buffer(JSON.stringify(getData(msg.trim())))
+    socket.send(res, 0, res.length, rinfo.port, rinfo.address + "%" + getConfig("mcast_iface"), (err) => { if (err) console.log(err) })
+  }
+})
+
+socket.on('listening', () => {
+  var addr = socket.address()
+  console.log("socket listening on " + addr.address + ":" + addr.port)
+})
+
+socket.bind(getConfig("port"), () => {
+  socket.addMembership(getConfig("mcast_group"), getConfig("listen"))
+})
+

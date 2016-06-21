@@ -1,0 +1,12 @@
+[Unit]
+Description=The node-respondd server provides data about this node to the local network.
+
+[Service]
+Type=simple
+User=nobody
+Group=nobody
+WorkingDirectory=/opt/node-respondd
+ExecStart=/opt/node-respondd/respondd
+
+[Install]
+WantedBy=multi-user.target

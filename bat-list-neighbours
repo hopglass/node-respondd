@@ -1,0 +1,32 @@
+#!/usr/bin/env node
+
+const fs = require('fs')
+const netIfaces = require('os').networkInterfaces()
+
+var batIface = "bat0"
+try {
+  var c = JSON.parse(fs.readFileSync("./config.json")).bat_iface
+  if (c != null) batIface = c.replace(/[^A-Za-z0-9\-_\.]/g, '')
+} catch (ignored) {
+}
+
+var res = {}
+var origs = fs.readFileSync("/sys/kernel/debug/batman_adv/" + batIface + "/originators").toString().trim()
+if (origs) {
+  origs = origs.split("\n")
+  origs.forEach((orig) => {
+    var mac = orig.substring(0,17)
+    if (orig.substring(36,53) != mac) return
+    var lastSeen = parseFloat(orig.substring(18,26).trim())
+    var tq = parseInt(orig.substring(31,34).trim())
+    var iface = orig.substring(55, 65).trim()
+    var mac2 = netIfaces[iface][0].mac
+    if (!(mac2 in res)) res[mac2] = {"neighbours": {}}
+    res[mac2].neighbours[mac] = {
+      "tq": tq,
+      "lastseen": lastSeen
+    }
+  })
+}
+
+console.log(JSON.stringify(res))
