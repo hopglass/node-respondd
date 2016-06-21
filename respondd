@@ -6,6 +6,7 @@ const fs = require('fs')
 const zlib = require('zlib')
 const os = require('os')
 const process = require('child_process')
+const myproc = require('process')
 
 const defConfig = {
   "bat_iface": "bat0",
@@ -216,5 +217,7 @@ socket.on('listening', () => {
 
 socket.bind(getConfig("port"), () => {
   socket.addMembership(getConfig("mcast_group"), getConfig("listen"))
+  myproc.setuid('nobody')
+  myproc.setgid('nogroup')
 })
 
