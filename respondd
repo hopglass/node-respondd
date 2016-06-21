@@ -217,7 +217,7 @@ socket.on('listening', () => {
 
 socket.bind(getConfig("port"), () => {
   socket.addMembership(getConfig("mcast_group"), getConfig("listen"))
-  myproc.setuid('nobody')
   myproc.setgid('nogroup')
+  myproc.setuid('nobody')
 })
 
