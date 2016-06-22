@@ -80,7 +80,7 @@ function getV6AddrForInterface(iface) {
 
 function isProcessRunning(name) {
   try {
-    return evalExec("sh -c \"ps a | grep "+name+" | grep -v grep\"").length > 0
+    return evalExec("ps ax | grep "+name+" | grep -v grep").length > 0
   } catch (e) {
     return false
   }
