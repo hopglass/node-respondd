@@ -19,7 +19,7 @@ if (origs) {
     if (orig.substring(36,53) != mac) return
     var lastSeen = parseFloat(orig.substring(18,26).trim())
     var tq = parseInt(orig.substring(31,34).trim())
-    var iface = orig.substring(55, 65).trim()
+    var iface = orig.split('[')[1].split(']')[0].trim()
     var mac2 = netIfaces[iface][0].mac
     if (!(mac2 in res)) res[mac2] = {"neighbours": {}}
     res[mac2].neighbours[mac] = {
