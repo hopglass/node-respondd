@@ -40,7 +40,7 @@ function getNodeinfo() {
     "system": {
       "site_code": getConfig("site_code")
     },
-    "hostname": os.hostname(),
+    "hostname": getConfig("hostname"),
     "hardware": {
       "model": os.cpus()[0].model,
       "nproc": os.cpus().length
@@ -183,6 +183,7 @@ function getConfig(opt) {
   if (opt == "listen")
     return getV6AddrForInterface(getConfig("mcast_iface")).filter((a) => a.startsWith("fe80:"))[0] + "%" + getConfig("mcast_iface")
   if (opt in config) return config[opt]
+  if (opt == "hostname") return os.hostname()
   else return defConfig[opt]
 }
 
