@@ -193,7 +193,7 @@ socket.on('error', (err) => {
 })
 
 socket.on('message', (msg, rinfo) => {
-  if (!rinfo.address.startsWith("fe80:")) return
+  if (!rinfo.address.startsWith("f")) return
   msg = msg.toString()
   console.log("message from: "+rinfo.address+": "+msg)
   if (msg.startsWith("GET ")) {
