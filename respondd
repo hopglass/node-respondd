@@ -9,7 +9,7 @@ const process = require('child_process')
 const myproc = require('process')
 
 const defConfig = {
-  "bat_iface": "bat0",
+  "bat_iface": ["bat0"],
   "mcast_group": "ff02::2:1001",
   "mcast_iface": "bat0",
   "port": "1001",
@@ -74,7 +74,7 @@ function getV6AddrForInterface(iface) {
   try {
     return os.networkInterfaces()[iface].filter((a) => a.family == "IPv6").map((a) => a.address)
   } catch (e) {
-    return undefined
+    return []
   }
 }
 
@@ -105,7 +105,13 @@ function getFileContents(name) {
 function getTrafficStats() {
   try {
     var res = {}
-    var vs = evalExec("/sbin/ethtool -S " + getConfig("bat_iface") + " | head -n 12 | tail -n 11").split("\n")
+    var vs = getConfig("bat_iface").flatMap((b) => {
+      try {
+        return evalExec("/sbin/ethtool -S " + b + " | head -n 12 | tail -n 11").split("\n")
+      } catch (e) {
+        return []
+      }
+    })
     vs.forEach((v) => {
       var x = v.split(": ")
       var group = x[0].trim()
@@ -129,15 +135,18 @@ function getTrafficStats() {
 }
 
 function getMeshAddresses() {
-  var bat = getConfig("bat_iface")
-  var data = {
-    "interfaces": {
-      "tunnel": evalExec("cat /sys/class/net/"+bat+"/lower_*/address").split("\n"),
-      "other": [getPrimaryMac()]
-    }
-  }
   var res = {}
-  res[bat] = data
+  getConfig("bat_iface").forEach((b) => {
+    try {
+      var data = {
+        "interfaces": {
+          "tunnel": evalExec("cat /sys/class/net/"+b+"/lower_*/address").split("\n"),
+          "other": [getPrimaryMac()]
+        }
+      }
+      res[b] = data
+    } catch (ignored) {}
+  })
   return res
 }
 
@@ -180,9 +189,14 @@ try {
 }
 
 function getConfig(opt) {
-  if (opt == "listen")
+  if (opt in config) {
+    const c = config[opt]
+    if (opt === "bat_iface" && typeof c === "string") return [c]
+    return c
+  }
+  if (opt == "listen") {
     return getV6AddrForInterface(getConfig("mcast_iface")).filter((a) => a.startsWith("fe80:"))[0] + "%" + getConfig("mcast_iface")
-  if (opt in config) return config[opt]
+  }
   if (opt == "hostname") return os.hostname()
   else return defConfig[opt]
 }
