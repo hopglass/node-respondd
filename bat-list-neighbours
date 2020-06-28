@@ -4,30 +4,33 @@ const fs = require('fs')
 const netIfaces = require('os').networkInterfaces()
 const exec = require('child_process').execSync
 
-var batIface = "bat0"
+var batIfaces = ["bat0"]
 try {
   var c = JSON.parse(fs.readFileSync("./config.json")).bat_iface
-  if (c != null) batIface = c.replace(/[^A-Za-z0-9\-_\.]/g, '')
+  if (typeof c === "string") c = [c]
+  if (c) batIfaces = c.map(b => b.replace(/[^A-Za-z0-9\-_\.]/g, ''))
 } catch (ignored) {
 }
 
 var res = {}
-var origs = exec("batctl meshif " + batIface + " originators").toString().trim()
-if (origs) {
-  origs = origs.split("\n")
-  origs.forEach((orig) => {
-    var mac = orig.substring(3,20)
-    if (orig.substring(39,56) != mac) return
-    var lastSeen = parseFloat(orig.substring(21,29).trim())
-    var tq = parseInt(orig.substring(34,37).trim())
-    var iface = orig.split('[')[1].split(']')[0].trim()
-    var mac2 = netIfaces[iface][0].mac
-    if (!(mac2 in res)) res[mac2] = {"neighbours": {}}
-    res[mac2].neighbours[mac] = {
-      "tq": tq,
-      "lastseen": lastSeen
-    }
-  })
+for(const batIface of batIfaces) {
+  var origs = exec("batctl meshif " + batIface + " originators").toString().trim()
+  if (origs) {
+    origs = origs.split("\n")
+    origs.forEach((orig) => {
+      var mac = orig.substring(3,20)
+      if (orig.substring(39,56) != mac) return
+      var lastSeen = parseFloat(orig.substring(21,29).trim())
+      var tq = parseInt(orig.substring(34,37).trim())
+      var iface = orig.split('[')[1].split(']')[0].trim()
+      var mac2 = netIfaces[iface][0].mac
+      if (!(mac2 in res)) res[mac2] = {"neighbours": {}}
+      res[mac2].neighbours[mac] = {
+        "tq": tq,
+        "lastseen": lastSeen
+      }
+    })
+  }
 }
 
 console.log(JSON.stringify(res))
